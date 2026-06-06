@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#000814" />
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MusicPlayer" />
+
+    <!-- Icons -->
+    <link rel="apple-touch-icon" href="/musicplayer/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/musicplayer/icon-152.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/musicplayer/icon-120.png" />
+    <link rel="icon" href="/musicplayer/icon-192.png" />
+    <link rel="manifest" href="/musicplayer/manifest.json" />
+
+    
+		<link rel="modulepreload" href="/musicplayer/_app/immutable/entry/start.DP-Gjdu_.js">
+		<link rel="modulepreload" href="/musicplayer/_app/immutable/chunks/scheduler.CphGLKuE.js">
+		<link rel="modulepreload" href="/musicplayer/_app/immutable/chunks/singletons.v64xQ5Eq.js">
+		<link rel="modulepreload" href="/musicplayer/_app/immutable/chunks/index.DuQVqMp6.js">
+		<link rel="modulepreload" href="/musicplayer/_app/immutable/entry/app.Cb2lG0CO.js">
+		<link rel="modulepreload" href="/musicplayer/_app/immutable/chunks/preload-helper.CmsKOCeN.js">
+		<link rel="modulepreload" href="/musicplayer/_app/immutable/chunks/index.CBIFAvGK.js">
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">
+			<script>
+				{
+					__sveltekit_gab5to = {
+						assets: "/musicplayer",
+						base: "/musicplayer",
+						env: {}
+					};
+
+					const element = document.currentScript.parentElement;
+
+					Promise.all([
+						import("/musicplayer/_app/immutable/entry/start.DP-Gjdu_.js"),
+						import("/musicplayer/_app/immutable/entry/app.Cb2lG0CO.js")
+					]).then(([kit, app]) => {
+						kit.start(app, element);
+					});
+				}
+			</script>
+		</div>
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/musicplayer/sw.js', {
+          updateViaCache: 'none'
+        }).then(reg => {
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          reg.addEventListener('updatefound', () => {
+            const sw = reg.installing;
+            sw && sw.addEventListener('statechange', () => {
+              if (sw.state === 'installed' && navigator.serviceWorker.controller)
+                sw.postMessage({ type: 'SKIP_WAITING' });
+            });
+          });
+          navigator.serviceWorker.addEventListener('controllerchange', () =>
+            setTimeout(() => location.reload(), 400));
+        }).catch(() => {});
+      }
+    </script>
+  </body>
+</html>
