@@ -17,23 +17,23 @@
     <link rel="icon" href="/musicplayer-staging/icon-192.png" />
     <link rel="manifest" href="/musicplayer-staging/manifest.json" />
 
-    <link href="/musicplayer-staging/_app/immutable/entry/start.cZH3JVs_.js" rel="modulepreload">
-		<link href="/musicplayer-staging/_app/immutable/chunks/n0V2bWCz.js" rel="modulepreload">
+    <link href="/musicplayer-staging/_app/immutable/entry/start.DESF5PzM.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/chunks/D8WbjSdW.js" rel="modulepreload">
 		<link href="/musicplayer-staging/_app/immutable/chunks/BSw_KR7x.js" rel="modulepreload">
 		<link href="/musicplayer-staging/_app/immutable/chunks/DOD7t3Di.js" rel="modulepreload">
-		<link href="/musicplayer-staging/_app/immutable/entry/app.BNah49s5.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/entry/app.uLsvK6k5.js" rel="modulepreload">
 		<link href="/musicplayer-staging/_app/immutable/chunks/CmsKOCeN.js" rel="modulepreload">
 		<link href="/musicplayer-staging/_app/immutable/chunks/-In5gsl0.js" rel="modulepreload">
-		<link href="/musicplayer-staging/_app/immutable/nodes/0.CMc66IFl.js" rel="modulepreload">
-		<link href="/musicplayer-staging/_app/immutable/chunks/B7IWr1qH.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/nodes/0.BDzDIFbf.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/chunks/BMYSc_QI.js" rel="modulepreload">
 		
-		<link href="/musicplayer-staging/_app/immutable/assets/0.C8WRnNqM.css" rel="stylesheet">
+		<link href="/musicplayer-staging/_app/immutable/assets/0.CGL3i71V.css" rel="stylesheet">
   </head>
   <body data-sveltekit-preload-data="hover">
     <div style="display: contents">
 			<script>
 				{
-					__sveltekit_1aj0hmf = {
+					__sveltekit_13xfrkp = {
 						base: "/musicplayer-staging",
 						assets: "/musicplayer-staging"
 					};
@@ -41,8 +41,8 @@
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("/musicplayer-staging/_app/immutable/entry/start.cZH3JVs_.js"),
-						import("/musicplayer-staging/_app/immutable/entry/app.BNah49s5.js")
+						import("/musicplayer-staging/_app/immutable/entry/start.DESF5PzM.js"),
+						import("/musicplayer-staging/_app/immutable/entry/app.uLsvK6k5.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});
@@ -55,14 +55,33 @@
         navigator.serviceWorker.register('/musicplayer-staging/sw.js', {
           updateViaCache: 'none'
         }).then(reg => {
-          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          // Ask the waiting/installing SW for its version, then notify the app
+          function notifyIfNewer(sw) {
+            if (!sw) return;
+            const mc = new MessageChannel();
+            mc.port1.onmessage = e => {
+              if (e.data?.type === 'SW_VERSION') {
+                window.dispatchEvent(new CustomEvent('sw-update-ready', {
+                  detail: { waiting: sw, newVersion: e.data.version }
+                }));
+              }
+            };
+            sw.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
+          }
+
+          // Already waiting on page load (e.g. user had the tab open during a deploy)
+          if (reg.waiting) notifyIfNewer(reg.waiting);
+
           reg.addEventListener('updatefound', () => {
             const sw = reg.installing;
-            sw && sw.addEventListener('statechange', () => {
+            if (!sw) return;
+            sw.addEventListener('statechange', () => {
               if (sw.state === 'installed' && navigator.serviceWorker.controller)
-                sw.postMessage({ type: 'SKIP_WAITING' });
+                notifyIfNewer(sw);
             });
           });
+
+          // When the new SW takes control, reload to load fresh assets
           navigator.serviceWorker.addEventListener('controllerchange', () =>
             setTimeout(() => location.reload(), 400));
         }).catch(() => {});
