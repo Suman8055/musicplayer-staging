@@ -4,11 +4,12 @@
 //   1. SPA fallback: any navigation request → serve /musicplayer/index.html
 //   2. Cache-first for /_app/immutable/ (content-hashed, never changes)
 //   3. Network-first for API calls (streaming URLs must be fresh)
+//   4. skipWaiting only after shell cache succeeds — prevents blank screen on partial cache
 
 const BASE  = self.registration.scope.replace(/\/$/, '');
-const CACHE = 'mbx-sk-v5.2.7-4729feb';
+const CACHE = 'mbx-sk-v5.2.8-7bb67b9';
 
-// Shell files — updated after build when hashed _app filenames are known
+// Shell files — updated by inject-sw-shell.js after build with current chunk hashes
 const SHELL = [
   BASE + '/',
   BASE + '/index.html',
@@ -17,21 +18,27 @@ const SHELL = [
   BASE + '/icon-192.png',
   BASE + '/icon-512.png',
   BASE + '/apple-touch-icon.png',
-  BASE + '/_app/immutable/entry/start.CmDDDIRm.js',
-  BASE + '/_app/immutable/chunks/CbguxZ4U.js',
+  BASE + '/_app/immutable/entry/start.DvGTEDNt.js',
+  BASE + '/_app/immutable/chunks/CWUSYGT7.js',
   BASE + '/_app/immutable/chunks/BSw_KR7x.js',
   BASE + '/_app/immutable/chunks/C6MFgNCR.js',
-  BASE + '/_app/immutable/entry/app.-8NQ3Gjs.js',
+  BASE + '/_app/immutable/entry/app.DhfUom6A.js',
   BASE + '/_app/immutable/chunks/CmsKOCeN.js',
   BASE + '/_app/immutable/chunks/-In5gsl0.js',
-  BASE + '/_app/immutable/nodes/0.Bm_HVrV7.js',
-  BASE + '/_app/immutable/chunks/C_dH1kZV.js',
+  BASE + '/_app/immutable/nodes/0.DMxPhss-.js',
+  BASE + '/_app/immutable/chunks/CxOCvxX6.js',
   BASE + '/_app/immutable/assets/0.BdWKE3eZ.css',
 ];
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then(c => c.addAll(SHELL))
+      .then(() => self.skipWaiting())
+      .catch(err => {
+        console.error('[SW] Shell pre-cache failed — keeping old SW active', err);
+        throw err; // prevents skipWaiting, old SW stays in control
+      })
   );
 });
 
@@ -76,7 +83,9 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(e.request)
         .then(res => res.ok ? res : caches.match(BASE + '/index.html'))
-        .catch(() => caches.match(BASE + '/index.html'))
+        .catch(() => caches.match(BASE + '/index.html')
+          .then(cached => cached || new Response('App offline — please reload', { status: 503, headers: { 'Content-Type': 'text/plain' } }))
+        )
     );
     return;
   }
