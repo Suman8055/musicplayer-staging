@@ -11,38 +11,38 @@
     <meta name="apple-mobile-web-app-title" content="MusicPlayer" />
 
     <!-- Icons -->
-    <link rel="apple-touch-icon" href="/musicplayer/apple-touch-icon.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/musicplayer/icon-152.png" />
-    <link rel="apple-touch-icon" sizes="120x120" href="/musicplayer/icon-120.png" />
-    <link rel="icon" href="/musicplayer/icon-192.png" />
-    <link rel="manifest" href="/musicplayer/manifest.json" />
+    <link rel="apple-touch-icon" href="/musicplayer-staging/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/musicplayer-staging/icon-152.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/musicplayer-staging/icon-120.png" />
+    <link rel="icon" href="/musicplayer-staging/icon-192.png" />
+    <link rel="manifest" href="/musicplayer-staging/manifest.json" />
 
-    <link href="/musicplayer/_app/immutable/entry/start.DLCLLQUZ.js" rel="modulepreload">
-		<link href="/musicplayer/_app/immutable/chunks/ITs_cGa_.js" rel="modulepreload">
-		<link href="/musicplayer/_app/immutable/chunks/BSw_KR7x.js" rel="modulepreload">
-		<link href="/musicplayer/_app/immutable/chunks/DOD7t3Di.js" rel="modulepreload">
-		<link href="/musicplayer/_app/immutable/entry/app.Bis8oJH9.js" rel="modulepreload">
-		<link href="/musicplayer/_app/immutable/chunks/CmsKOCeN.js" rel="modulepreload">
-		<link href="/musicplayer/_app/immutable/chunks/-In5gsl0.js" rel="modulepreload">
-		<link href="/musicplayer/_app/immutable/nodes/0.Bx5oZczD.js" rel="modulepreload">
-		<link href="/musicplayer/_app/immutable/chunks/BM2wf2Oq.js" rel="modulepreload">
+    <link href="/musicplayer-staging/_app/immutable/entry/start.Csw53mmD.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/chunks/B8ysCNnU.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/chunks/BSw_KR7x.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/chunks/C6MFgNCR.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/entry/app.CKAT6FP_.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/chunks/CmsKOCeN.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/chunks/-In5gsl0.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/nodes/0.CorkbS5-.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/chunks/CByg84qE.js" rel="modulepreload">
 		
-		<link href="/musicplayer/_app/immutable/assets/0.D2tRcoHh.css" rel="stylesheet">
+		<link href="/musicplayer-staging/_app/immutable/assets/0.BdWKE3eZ.css" rel="stylesheet">
   </head>
   <body data-sveltekit-preload-data="hover">
     <div style="display: contents">
 			<script>
 				{
-					__sveltekit_1r57u0g = {
-						base: "/musicplayer",
-						assets: "/musicplayer"
+					__sveltekit_1wbyp03 = {
+						base: "/musicplayer-staging",
+						assets: "/musicplayer-staging"
 					};
 
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("/musicplayer/_app/immutable/entry/start.DLCLLQUZ.js"),
-						import("/musicplayer/_app/immutable/entry/app.Bis8oJH9.js")
+						import("/musicplayer-staging/_app/immutable/entry/start.Csw53mmD.js"),
+						import("/musicplayer-staging/_app/immutable/entry/app.CKAT6FP_.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});
@@ -52,17 +52,36 @@
 
     <script>
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/musicplayer/sw.js', {
+        navigator.serviceWorker.register('/musicplayer-staging/sw.js', {
           updateViaCache: 'none'
         }).then(reg => {
-          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          // Ask the waiting/installing SW for its version, then notify the app
+          function notifyIfNewer(sw) {
+            if (!sw) return;
+            const mc = new MessageChannel();
+            mc.port1.onmessage = e => {
+              if (e.data?.type === 'SW_VERSION') {
+                window.dispatchEvent(new CustomEvent('sw-update-ready', {
+                  detail: { waiting: sw, newVersion: e.data.version }
+                }));
+              }
+            };
+            sw.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
+          }
+
+          // Already waiting on page load (e.g. user had the tab open during a deploy)
+          if (reg.waiting) notifyIfNewer(reg.waiting);
+
           reg.addEventListener('updatefound', () => {
             const sw = reg.installing;
-            sw && sw.addEventListener('statechange', () => {
+            if (!sw) return;
+            sw.addEventListener('statechange', () => {
               if (sw.state === 'installed' && navigator.serviceWorker.controller)
-                sw.postMessage({ type: 'SKIP_WAITING' });
+                notifyIfNewer(sw);
             });
           });
+
+          // When the new SW takes control, reload to load fresh assets
           navigator.serviceWorker.addEventListener('controllerchange', () =>
             setTimeout(() => location.reload(), 400));
         }).catch(() => {});
