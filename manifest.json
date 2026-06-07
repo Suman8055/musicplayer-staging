@@ -2,8 +2,8 @@
   "name": "MusicPlayer",
   "short_name": "MusicPlayer",
   "description": "Stream JioSaavn music — offline-ready",
-  "start_url": "/musicplayer-staging/",
-  "scope": "/musicplayer-staging/",
+  "start_url": "/musicplayer/",
+  "scope": "/musicplayer/",
   "display": "standalone",
   "display_override": [
     "standalone",
