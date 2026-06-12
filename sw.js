@@ -7,7 +7,7 @@
 //   4. skipWaiting only after shell cache succeeds — prevents blank screen on partial cache
 
 const BASE  = self.registration.scope.replace(/\/$/, '');
-const CACHE = 'mbx-sk-v5.2.35-a8bd6e3';
+const CACHE = 'mbx-sk-v5.2.36-7f4ecac';
 
 // Shell files — updated by inject-sw-shell.js after build with current chunk hashes
 const SHELL = [
@@ -18,16 +18,16 @@ const SHELL = [
   BASE + '/icon-192.png',
   BASE + '/icon-512.png',
   BASE + '/apple-touch-icon.png',
-  BASE + '/_app/immutable/entry/start.BqKteIpi.js',
-  BASE + '/_app/immutable/chunks/gZFs9z3d.js',
+  BASE + '/_app/immutable/entry/start.CxbzKTp8.js',
+  BASE + '/_app/immutable/chunks/X0tZ-sJC.js',
   BASE + '/_app/immutable/chunks/BSw_KR7x.js',
   BASE + '/_app/immutable/chunks/C6MFgNCR.js',
-  BASE + '/_app/immutable/entry/app.qfjtDszP.js',
+  BASE + '/_app/immutable/entry/app.43pTZx2j.js',
   BASE + '/_app/immutable/chunks/CmsKOCeN.js',
   BASE + '/_app/immutable/chunks/-In5gsl0.js',
-  BASE + '/_app/immutable/nodes/0.04Ge5JRZ.js',
-  BASE + '/_app/immutable/chunks/BuBzAvIw.js',
-  BASE + '/_app/immutable/assets/0.C0ADcC_h.css',
+  BASE + '/_app/immutable/nodes/0.BsA_K7UD.js',
+  BASE + '/_app/immutable/chunks/qOcBZdOU.js',
+  BASE + '/_app/immutable/assets/0.C_u_Kvl2.css',
 ];
 
 self.addEventListener('install', e => {
@@ -51,6 +51,10 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('message', e => {
+  // Only honour messages from the same origin — prevents cross-origin iframes
+  // or compromised third-party scripts from forcing premature SW activation.
+  const allowedOrigin = new URL(self.registration.scope).origin;
+  if (e.origin && e.origin !== allowedOrigin) return;
   if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
   if (e.data?.type === 'GET_VERSION') {
     e.source?.postMessage({ type: 'SW_VERSION', version: CACHE });
