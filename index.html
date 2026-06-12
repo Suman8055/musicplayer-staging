@@ -17,15 +17,19 @@
     <link rel="icon" href="/musicplayer-staging/icon-192.png" />
     <link rel="manifest" href="/musicplayer-staging/manifest.json" />
 
-    <link href="/musicplayer-staging/_app/immutable/entry/start.D4KGJ3VV.js" rel="modulepreload">
-		<link href="/musicplayer-staging/_app/immutable/chunks/DJXhcVIc.js" rel="modulepreload">
+    <!-- Preconnect: eliminates DNS+TLS round-trip on first API call (~300-800ms on mobile) -->
+    <link rel="preconnect" href="https://jiosaavn-api-sigma-sandy.vercel.app" />
+    <link rel="dns-prefetch" href="https://jiosaavn-api-sigma-sandy.vercel.app" />
+
+    <link href="/musicplayer-staging/_app/immutable/entry/start.xcnRudOM.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/chunks/Ck5WEnag.js" rel="modulepreload">
 		<link href="/musicplayer-staging/_app/immutable/chunks/BSw_KR7x.js" rel="modulepreload">
 		<link href="/musicplayer-staging/_app/immutable/chunks/C6MFgNCR.js" rel="modulepreload">
-		<link href="/musicplayer-staging/_app/immutable/entry/app.C57nM5ju.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/entry/app.CP5KLNal.js" rel="modulepreload">
 		<link href="/musicplayer-staging/_app/immutable/chunks/CmsKOCeN.js" rel="modulepreload">
 		<link href="/musicplayer-staging/_app/immutable/chunks/-In5gsl0.js" rel="modulepreload">
-		<link href="/musicplayer-staging/_app/immutable/nodes/0.B1TMnNnL.js" rel="modulepreload">
-		<link href="/musicplayer-staging/_app/immutable/chunks/fd6k9AgO.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/nodes/0.Bxl-kYf1.js" rel="modulepreload">
+		<link href="/musicplayer-staging/_app/immutable/chunks/BXycLiQw.js" rel="modulepreload">
 		
 		<link href="/musicplayer-staging/_app/immutable/assets/0.C0ADcC_h.css" rel="stylesheet">
   </head>
@@ -33,7 +37,7 @@
     <div style="display: contents">
 			<script>
 				{
-					__sveltekit_1w7swzf = {
+					__sveltekit_hg8qov = {
 						base: "/musicplayer-staging",
 						assets: "/musicplayer-staging"
 					};
@@ -41,8 +45,8 @@
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("/musicplayer-staging/_app/immutable/entry/start.D4KGJ3VV.js"),
-						import("/musicplayer-staging/_app/immutable/entry/app.C57nM5ju.js")
+						import("/musicplayer-staging/_app/immutable/entry/start.xcnRudOM.js"),
+						import("/musicplayer-staging/_app/immutable/entry/app.CP5KLNal.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});
