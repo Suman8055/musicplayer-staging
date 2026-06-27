@@ -189,6 +189,25 @@
     image: bestImg(a.image, '150x150'),
   })).filter(a => a.id);
 
+  // Hero banner — first 3 trending songs with images
+  $: heroItems = trendingSongs.filter(s => s.image).slice(0, 3);
+  $: heroSong = heroItems[heroIdx] ?? null;
+  let heroIdx = 0;
+  let heroTimer = null;
+
+  $: if (heroItems.length > 1) {
+    clearInterval(heroTimer);
+    heroTimer = setInterval(() => { heroIdx = (heroIdx + 1) % heroItems.length; }, 4500);
+  }
+
+  // Horizontal carousel scroll helpers
+  function scrollCarousel(el, dir) {
+    if (el) el.scrollBy({ left: dir * 220, behavior: 'smooth' });
+  }
+
+  // Carousel element refs (bind:this targets)
+  let trendEl, albEl, nrEl, artEl, fpEl, fyEl;
+
   function normTrendingItem(s) {
     const pa = s.primaryArtists;
     const artist = Array.isArray(pa) ? pa.map(a => a.name).filter(Boolean).join(', ')
@@ -211,6 +230,38 @@
       </button>
     {/each}
   </div>
+
+  <!-- Hero Banner — real trending songs, auto-slides every 4.5s -->
+  {#if !loading && !browseError && heroSong}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <div class="hero-banner" on:click={() => playSong(heroSong, trendingSongs, heroIdx)}
+      style="--hero-bg: url('{heroSong.image}')">
+      <div class="hero-bg"></div>
+      <div class="hero-content">
+        <img class="hero-art" src={heroSong.image} alt={heroSong.name} />
+        <div class="hero-text">
+          <div class="hero-tag">Trending Now</div>
+          <div class="hero-title">{heroSong.name}</div>
+          <div class="hero-artist">{heroSong.artist}</div>
+          <button class="hero-play-btn" on:click|stopPropagation={() => playSong(heroSong, trendingSongs, heroIdx)}
+            aria-label="Play {heroSong.name}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            Play
+          </button>
+        </div>
+      </div>
+      {#if heroItems.length > 1}
+        <div class="hero-dots">
+          {#each heroItems as _, i}
+            <button class="hero-dot" class:active={i === heroIdx}
+              on:click|stopPropagation={() => heroIdx = i}
+              aria-label="Go to slide {i + 1}">
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   {#if loading}
     <div class="empty-wrap"><div class="spinner"></div></div>
@@ -252,13 +303,24 @@
 
     <!-- Trending Today -->
     {#if trendingSongs.length}
-      <div class="section-title">Trending Today · {activeLang}</div>
+      <div class="section-hd">
+        <span class="section-title section-title--inline">Trending Today · {activeLang}</span>
+        <div class="scroll-arrows">
+          <button class="scroll-arrow" aria-label="Scroll left" on:click={() => scrollCarousel(trendEl, -1)}>‹</button>
+          <button class="scroll-arrow" aria-label="Scroll right" on:click={() => scrollCarousel(trendEl, 1)}>›</button>
+        </div>
+      </div>
       <div class="scroll-fade-wrap">
-        <div class="h-scroll">
+        <div class="h-scroll" bind:this={trendEl}>
           {#each trendingSongs as song, i}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
             <div class="content-card" on:click={() => playSong(song, trendingSongs, i)}>
-              <img src={bestImg(song.image, '150x150')} alt="" class="card-img" loading="lazy" />
+              <div class="card-img-wrap">
+                <img src={bestImg(song.image, '150x150')} alt="" class="card-img" loading="lazy" />
+                <div class="card-play-overlay" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </div>
+              </div>
               <div class="card-name">{song.name}</div>
               <div class="card-sub">{song.artist}</div>
             </div>
@@ -269,13 +331,24 @@
 
     <!-- Trending Albums -->
     {#if trendingAlbums.length}
-      <div class="section-title">Trending Albums</div>
+      <div class="section-hd">
+        <span class="section-title section-title--inline">Trending Albums</span>
+        <div class="scroll-arrows">
+          <button class="scroll-arrow" aria-label="Scroll left" on:click={() => scrollCarousel(albEl, -1)}>‹</button>
+          <button class="scroll-arrow" aria-label="Scroll right" on:click={() => scrollCarousel(albEl, 1)}>›</button>
+        </div>
+      </div>
       <div class="scroll-fade-wrap">
-        <div class="h-scroll">
+        <div class="h-scroll" bind:this={albEl}>
           {#each trendingAlbums as album}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
             <div class="content-card" on:click={() => openDetail(album.id, 'album', album.name || album.title)}>
-              <img src={bestImg(album.image, '150x150')} alt="" class="card-img" loading="lazy" />
+              <div class="card-img-wrap">
+                <img src={bestImg(album.image, '150x150')} alt="" class="card-img" loading="lazy" />
+                <div class="card-play-overlay" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </div>
+              </div>
               <div class="card-name">{album.name || album.title}</div>
               <div class="card-sub">{Array.isArray(album.primaryArtists) ? album.primaryArtists.map(a=>a.name).join(', ') : (album.subtitle || album.language || '')}</div>
             </div>
@@ -286,13 +359,24 @@
 
     <!-- New Releases -->
     {#if newReleases.length}
-      <div class="section-title">New Releases</div>
+      <div class="section-hd">
+        <span class="section-title section-title--inline">New Releases</span>
+        <div class="scroll-arrows">
+          <button class="scroll-arrow" aria-label="Scroll left" on:click={() => scrollCarousel(nrEl, -1)}>‹</button>
+          <button class="scroll-arrow" aria-label="Scroll right" on:click={() => scrollCarousel(nrEl, 1)}>›</button>
+        </div>
+      </div>
       <div class="scroll-fade-wrap">
-        <div class="h-scroll">
+        <div class="h-scroll" bind:this={nrEl}>
           {#each newReleases as album}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
             <div class="content-card" on:click={() => openNewRelease(album)}>
-              <img src={bestImg(album.image, '150x150')} alt="" class="card-img" loading="lazy" />
+              <div class="card-img-wrap">
+                <img src={bestImg(album.image, '150x150')} alt="" class="card-img" loading="lazy" />
+                <div class="card-play-overlay" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </div>
+              </div>
               <div class="card-name">{album.name || album.title}</div>
               <div class="card-sub">{Array.isArray(album.primaryArtists) ? album.primaryArtists.map(a=>a.name).join(', ') : (album.subtitle || album.language || '')}</div>
             </div>
@@ -303,9 +387,15 @@
 
     <!-- Top Artists -->
     {#if topArtists.length}
-      <div class="section-title">Top Artists</div>
+      <div class="section-hd">
+        <span class="section-title section-title--inline">Top Artists</span>
+        <div class="scroll-arrows">
+          <button class="scroll-arrow" aria-label="Scroll left" on:click={() => scrollCarousel(artEl, -1)}>‹</button>
+          <button class="scroll-arrow" aria-label="Scroll right" on:click={() => scrollCarousel(artEl, 1)}>›</button>
+        </div>
+      </div>
       <div class="scroll-fade-wrap">
-        <div class="h-scroll">
+        <div class="h-scroll" bind:this={artEl}>
           {#each topArtists as artist}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
             <div class="content-card" on:click={() => openArtistDetail(artist.id, artist.name)}>
@@ -335,13 +425,24 @@
 
     <!-- Featured Playlists -->
     {#if featuredPlaylists?.length}
-      <div class="section-title">Featured Playlists</div>
+      <div class="section-hd">
+        <span class="section-title section-title--inline">Featured Playlists</span>
+        <div class="scroll-arrows">
+          <button class="scroll-arrow" aria-label="Scroll left" on:click={() => scrollCarousel(fpEl, -1)}>‹</button>
+          <button class="scroll-arrow" aria-label="Scroll right" on:click={() => scrollCarousel(fpEl, 1)}>›</button>
+        </div>
+      </div>
       <div class="scroll-fade-wrap">
-        <div class="h-scroll">
+        <div class="h-scroll" bind:this={fpEl}>
           {#each featuredPlaylists as pl}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
             <div class="content-card" on:click={() => openDetail(pl.id, 'playlist', pl.name)}>
-              <img src={bestImg(pl.image, '150x150')} alt="" class="card-img" loading="lazy" />
+              <div class="card-img-wrap">
+                <img src={bestImg(pl.image, '150x150')} alt="" class="card-img" loading="lazy" />
+                <div class="card-play-overlay" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </div>
+              </div>
               <div class="card-name">{pl.name}</div>
               <div class="card-sub">{pl.subtitle || ''}</div>
             </div>
@@ -442,9 +543,95 @@
   .tab-header { font-size: 22px; font-weight: 700; padding: 16px 16px 8px; display: flex; align-items: baseline; gap: 8px; }
   .greeting { font-size: 13px; font-weight: 400; color: var(--fg3); }
   .lang-pills { display: flex; gap: 6px; padding: 0 16px 12px; overflow-x: auto; }
+  .lang-pills::-webkit-scrollbar { display: none; }
   .lang-pill { padding: 6px 14px; border-radius: 20px; font-size: 13px; background: var(--bg3); color: var(--fg3); border: 1px solid rgba(255,255,255,.08); white-space: nowrap; }
   .lang-pill.active { background: var(--accent); color: #fff; border-color: transparent; }
+
+  /* ── Hero Banner ── */
+  .hero-banner {
+    margin: 0 16px 16px;
+    border-radius: 14px;
+    overflow: hidden;
+    height: 160px;
+    position: relative;
+    cursor: pointer;
+  }
+  .hero-bg {
+    position: absolute; inset: 0;
+    background-image: var(--hero-bg);
+    background-size: cover; background-position: center;
+    filter: blur(28px) brightness(.35) saturate(1.6);
+    transform: scale(1.15);
+  }
+  .hero-content {
+    position: relative; z-index: 1;
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px; height: 100%;
+  }
+  .hero-art {
+    width: 96px; height: 96px; border-radius: 10px;
+    object-fit: cover; flex-shrink: 0;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  }
+  .hero-text { flex: 1; min-width: 0; }
+  .hero-tag {
+    font-size: 10px; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px;
+  }
+  .hero-title {
+    font-size: 18px; font-weight: 800;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+  .hero-artist {
+    font-size: 12px; color: rgba(255,255,255,.65);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 12px;
+  }
+  .hero-play-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--accent); color: #fff;
+    border-radius: 20px; padding: 7px 16px;
+    font-size: 13px; font-weight: 700;
+  }
+  .hero-play-btn:active { opacity: .8; }
+  .hero-dots {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 5px; z-index: 2;
+  }
+  .hero-dot {
+    width: 6px; height: 6px; border-radius: 3px;
+    background: rgba(255,255,255,.35); padding: 0;
+    transition: width .3s, background .3s;
+  }
+  .hero-dot.active { width: 18px; background: var(--accent); }
+
+  /* ── Section headers with scroll arrows ── */
+  .section-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px 4px;
+  }
   .section-title { font-size: 13px; font-weight: 600; color: var(--fg3); padding: 10px 16px 4px; text-transform: uppercase; letter-spacing: var(--ls-section, .05em); }
+  .section-title--inline { padding: 0; }
+  .scroll-arrows { display: flex; gap: 4px; }
+  .scroll-arrow {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--bg3); color: var(--fg2);
+    font-size: 15px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(255,255,255,.08);
+  }
+  .scroll-arrow:active { background: var(--accent); color: #fff; }
+
+  /* ── Play overlay on cards ── */
+  .card-img-wrap { position: relative; width: 120px; height: 120px; }
+  .card-play-overlay {
+    position: absolute; inset: 0; border-radius: 10px;
+    background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .15s;
+    color: #fff;
+  }
+  .content-card:active .card-play-overlay { opacity: 1; }
   .disc-hd { padding: 10px 16px 2px; }
   .disc-hd-title { font-size: 16px; font-weight: 700; }
   .disc-reason { font-size: 11px; color: var(--fg3); margin-left: 6px; }
