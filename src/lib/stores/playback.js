@@ -1,4 +1,4 @@
-import { writable, derived, get } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 
 export const nowSong     = writable(null);
 export const queue       = writable([]);
@@ -15,8 +15,6 @@ export const seekProgress = writable(0);  // 0.0–1.0
 export const duration    = writable(0);
 export const currentTime = writable(0);
 export const offlineBlobUrl = writable(null);
-
-export const isIdle = derived(nowSong, $s => $s === null);
 
 // audioEl ref — set by +layout.svelte so playback store can call audio methods
 let _audioEl = null;

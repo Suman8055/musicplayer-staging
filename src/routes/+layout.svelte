@@ -176,6 +176,10 @@
     window._mbxAudio = audioEngine.getDebugInfo;
     // Test hook: window._mbxSetAirPlay(true/false) simulates AirPlay activation without hardware
     // ── Audio element event listeners ─────────────────────────────────────────
+    // F3: stream-failure circuit breaker state (declared before the listeners that use it)
+    let _consecutiveSongFails = 0;
+    let _lastFailedSongId = null;
+    const MAX_CONSECUTIVE_FAILS = 4;
     audioEl.addEventListener('play', () => {
       playing.set(true);
       loadingUrl.set(false);
@@ -191,6 +195,9 @@
 
     audioEl.addEventListener('playing', () => {
       loadingUrl.set(false);
+      // F3: a song is actually playing — reset the stream-failure circuit breaker.
+      _consecutiveSongFails = 0;
+      _lastFailedSongId = null;
     });
 
     audioEl.addEventListener('waiting', () => {
@@ -229,6 +236,8 @@
     });
 
     // D7: audio error — show toast + auto-retry up to 2 times, then skip to next
+    // F3: circuit breaker — if several distinct songs fail in a row (API/CDN down),
+    // stop skipping so we don't spin next() through the whole queue forever.
     let _audioErrRetries = 0;
     let _audioErrSongId  = null;
     audioEl.addEventListener('error', () => {
@@ -246,9 +255,22 @@
         toast(`Playback error — retrying (${_audioErrRetries}/2)…`);
         setTimeout(() => { try { audioEl.load(); audioEl.play().catch(() => {}); } catch {} }, 800);
       } else {
-        toast('Playback failed — skipping to next track');
+        // This song has exhausted retries. Track distinct consecutive song failures.
+        if (curId !== _lastFailedSongId) { _consecutiveSongFails++; _lastFailedSongId = curId; }
         _audioErrRetries = 0;
-        setTimeout(() => { try { next(); } catch {} }, 500);
+        if (_consecutiveSongFails >= MAX_CONSECUTIVE_FAILS) {
+          // Streaming is broken (provider/CDN down) — stop the skip-loop and rest.
+          _consecutiveSongFails = 0;
+          _lastFailedSongId = null;
+          playing.set(false);
+          userPaused.set(true);
+          if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
+          Log.error('Playback circuit breaker tripped — too many consecutive stream failures');
+          toast('Streaming unavailable right now — playback paused');
+        } else {
+          toast('Playback failed — skipping to next track');
+          setTimeout(() => { try { next(); } catch {} }, 500);
+        }
       }
     });
 
@@ -301,9 +323,7 @@
       audioEngine.stopBgKeepAlive();
       if ('audioSession' in navigator) navigator.audioSession.type = 'playback';
       (async () => {
-        if (audioEngine.getDebugInfo()?.audioCtx?.state === 'suspended') {
-          try { await audioEngine.getDebugInfo().audioCtx.resume(); } catch {}
-        }
+        await audioEngine.resumeIfSuspended();
         if (!$userPaused && $nowSong && audioEl.paused) {
           audioEl.play().catch(() => {});
         }
@@ -314,8 +334,7 @@
     _on(window, 'pageshow', (e) => {
       if (!_isActiveTab || !e.persisted) return;
       (async () => {
-        const info = audioEngine.getDebugInfo();
-        if (info?.audioCtx?.state === 'suspended') { try { await info.audioCtx.resume(); } catch {} }
+        await audioEngine.resumeIfSuspended();
         if (!$userPaused && $nowSong && audioEl.paused) audioEl.play().catch(() => {});
       })();
     });
@@ -344,8 +363,7 @@
     _on(document, 'resume', () => {
       if (!_isActiveTab) return;
       (async () => {
-        const info = audioEngine.getDebugInfo();
-        if (info?.audioCtx?.state === 'suspended') { try { await info.audioCtx.resume(); } catch {} }
+        await audioEngine.resumeIfSuspended();
         if (!$userPaused && $nowSong && audioEl.paused) audioEl.play().catch(() => {});
       })();
     });
@@ -385,10 +403,17 @@
   playsinline
   webkit-playsinline
 ></audio>
+<!-- F18: crossorigin MUST match the main #audio element's CORS mode ('anonymous').
+     The preload element only ever buffers network stream URLs (offline songs use the
+     IDB blob-preload path, never this element), so a static anonymous mode is safe.
+     Without it, a URL buffered here as a non-CORS response can't be reused by the
+     main element's CORS request — worst case it re-fetches and taints
+     MediaElementSource, silently bypassing the entire EQ/limiter chain for that song. -->
 <audio
   id="audio-preload"
   bind:this={audioPreloadEl}
   preload="auto"
+  crossorigin="anonymous"
   playsinline
   webkit-playsinline
   style="visibility:hidden;position:absolute;width:0;height:0;pointer-events:none"

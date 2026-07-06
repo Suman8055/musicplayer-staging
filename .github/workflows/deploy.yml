@@ -36,4 +36,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./build
           publish_branch: gh-pages
-          keep_files: false
+          # F31: keep old files so the previous build's content-hashed immutable chunks
+          # survive one deploy cycle. A client still running the old build (or the SW
+          # mid-reload) can still fetch its chunks instead of hitting a 404. Hashed
+          # filenames never collide, so stale chunks are harmless and get GC'd naturally.
+          keep_files: true

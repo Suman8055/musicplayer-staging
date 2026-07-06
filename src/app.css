@@ -94,8 +94,6 @@ a { color: inherit; text-decoration: none; }
   .spinner, .eq-bars span { animation: none !important; }
   /* Artwork scale pulse */
   #np-art { transition: none !important; }
-  /* Skeleton shimmer (Sprint 4) */
-  .skeleton-shimmer { animation: none !important; }
   /* Preserve panel/navigation transitions but make them near-instant */
   #np, #pl-view, #browse-detail, #browse-artist-detail, #browse-album-from-artist,
   #queue-panel, #eq-sheet, #action-sheet, #prompt-modal, .update-banner {

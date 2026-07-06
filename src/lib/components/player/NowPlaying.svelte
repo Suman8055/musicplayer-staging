@@ -5,7 +5,7 @@
   import { liked, playlists, downloadedIds } from '$lib/stores/library.js';
   import { togglePlay, prev, next, seek, createShuffledQueue } from '$lib/playback.js';
   import { intelTrackLike } from '$lib/smartPlay.js';
-  import { fmt, esc } from '$lib/utils.js';
+  import { fmt } from '$lib/utils.js';
   import { get } from 'svelte/store';
   import { downloadSong, removeDownload, idbGetAll } from '$lib/idb.js';
   import { apiStream } from '$lib/api.js';
@@ -290,7 +290,7 @@
     </div>
 
     {#if $whyChip}
-      <div id="np-why-chip" on:click={() => {}}>{$whyChip.label}</div>
+      <div id="np-why-chip">{$whyChip.label}</div>
     {/if}
 
     <!-- D1: np-footer min-height 44px; D4: aria-labels on all footer buttons -->

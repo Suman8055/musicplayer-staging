@@ -2,7 +2,7 @@
 // Zero DOM dependencies. All UI updates go through Svelte stores.
 import { get } from 'svelte/store';
 import { queue, qIdx, shuffleOn } from './stores/playback.js';
-import { smartQueueActive, smartPlayOn, injectedIds, whyChip, moodBadgeText } from './stores/smartplay.js';
+import { smartQueueActive, smartPlayOn, whyChip } from './stores/smartplay.js';
 import { toast } from './stores/ui.js';
 import { searchSongs, fetchArtistSongs, filterByLanguage } from './api.js';
 
@@ -320,7 +320,6 @@ export async function smartInjectAhead() {
     const allSongs = filterByLanguage(await fetchArtistSongs(artist.name, 20));
     const picks = allSongs.filter(s => s.id && !played.has(s.id) && !inQueue.has(s.id)).sort(() => Math.random() - 0.5).slice(0, 2);
     if (!picks.length) return;
-    picks.forEach(s => injectedIds.update(set => { set.add(s.id); return new Set(set); }));
     queue.update(q => [...q, ...picks]);
     smartQueueActive.set(true);
   } catch {} finally {
@@ -364,31 +363,6 @@ export async function smartQueueFill() {
     return true;
   } catch { smartQueueActive.set(false); return false; }
   finally { _queueWritePending = false; }
-}
-
-export async function startSmartRadio(song, playFn) {
-  if (!song?.artist) return;
-  const seedKey = _artistKey(song);
-  const d = intelLoad();
-  const seedArtists = [song];
-  const flowMap = d.flows?.[seedKey] || {};
-  const flowPartners = Object.entries(flowMap)
-    .map(([k, v]) => [k, typeof v === 'number' ? v : (v?.count || 0)])
-    .sort(([, a], [, b]) => b - a).slice(0, 2)
-    .map(([k]) => d.artists[k]).filter(Boolean);
-  for (const a of flowPartners) seedArtists.push({ artist: a.name });
-  toast('Starting Smart Radio...');
-  let combined = [];
-  for (const seed of seedArtists) {
-    try { combined.push(...filterByLanguage(await fetchArtistSongs(seed.artist || '', 20))); } catch {}
-  }
-  combined = combined.filter(s => s.id).sort(() => Math.random() - 0.5);
-  if (!combined.length) { toast('Smart Radio — no songs found'); return; }
-  queue.set(combined);
-  qIdx.set(0);
-  whyChip.set({ reason: `Smart Radio · ${song.artist}`, label: song.artist });
-  smartQueueActive.set(true);
-  playFn(combined[0], combined, 0);
 }
 
 // ── For You rows ──────────────────────────────────────────────────────────────
@@ -491,8 +465,6 @@ export async function buildForYouRows() {
   }
 }
 
-export function invalidateForYouCache() { _forYouCache = null; }
-
 export function suppressArtist(song) {
   const key = _artistKey(song);
   if (key && key !== 'n:') {
@@ -503,7 +475,3 @@ export function suppressArtist(song) {
   }
 }
 
-export function getSessionSuppressed() {
-  const d = intelLoad();
-  return [..._sessionSuppressed].map(key => ({ key, name: d.artists[key]?.name || key }));
-}

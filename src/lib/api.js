@@ -4,7 +4,7 @@ import { decodeHtml, bestImg } from './utils.js';
 import { Log } from './logger.js';
 
 
-export const APP_VERSION = '5.2.62';
+export const APP_VERSION = '5.2.63';
 export const STORE_KEY   = 'mbx_v2';
 export const ENV_KEY     = 'mbx_env';
 // DES-ECB key removed — was dead code from the old SAAVN stream URL decryption path.
@@ -90,17 +90,30 @@ export function classifyLanguage(song) {
   return script === 'latin' ? 'english' : null;
 }
 
+// F27: parseInt on a non-numeric/undefined duration yields NaN, which JSON.stringify
+// serialises as null and leaks into liked/downloaded records. Coerce to a safe integer.
+function safeDuration(v) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export function filterByLanguage(songs, activeLang = '') {
   if (activeLang === 'english') return songs.filter(s => s._lang === 'english' || s._lang === null);
   if (activeLang) return songs.filter(s => s._lang === activeLang);
-  return songs.filter(s => s._lang && ALLOWED_LANGUAGES.has(s._lang));
+  // F4: no active language → keep everything allowlisted PLUS unknown (_lang === null).
+  // Fallback-search results (autocomplete path) all carry _lang === null; the old
+  // filter dropped every one of them, silently starving SmartPlay queue fills.
+  return songs.filter(s => s._lang === null || (s._lang && ALLOWED_LANGUAGES.has(s._lang)));
 }
 
 function normSigmaSong(s) {
   const pa = s.primaryArtists;
-  const artist = Array.isArray(pa)
+  // F26: an empty primaryArtists array yielded '' → artist key 'n:' → intel never
+  // tracked the play. Fall back to artistMap for the array-but-empty case too.
+  let artist = Array.isArray(pa)
     ? pa.map(a => a.name || '').filter(Boolean).join(', ')
-    : decodeHtml(pa || s.artistMap?.primary?.[0]?.name || '');
+    : decodeHtml(pa || '');
+  if (!artist) artist = decodeHtml(s.artistMap?.primary?.[0]?.name || '');
   const song = {
     id:       s.id,
     name:     decodeHtml(s.name || s.title || ''),
@@ -108,7 +121,7 @@ function normSigmaSong(s) {
     album:    decodeHtml(s.album?.name || s.album || ''),
     language: s.language || '',
     image:    bestImg(s.image, '150x150'),
-    duration: parseInt(s.duration || 0),
+    duration: safeDuration(s.duration),
   };
   song._lang = classifyLanguage(song);
   return song;
@@ -127,7 +140,7 @@ async function _searchFallback(q, limit = 20) {
     artist:   decodeHtml(s.more_info?.primary_artists || s.more_info?.singers || ''),
     album:    decodeHtml(s.album || ''),
     image:    (s.image || '').replace('50x50', '150x150'),
-    duration: parseInt(s.more_info?.duration || 0),
+    duration: safeDuration(s.more_info?.duration),
     _lang:    null,
   }));
 }
@@ -138,7 +151,7 @@ export async function searchSongs(q, limit = 20) {
     const data = await r.json();
     const results = data.data?.results;
     if (data.status === 'SUCCESS' && results?.length) return results.map(normSigmaSong);
-  } catch {}
+  } catch (e) { Log.warn('searchSongs: sigma failed, using fallback', { q, err: e?.message }); }
   return _searchFallback(q, limit);
 }
 
@@ -155,7 +168,7 @@ export async function searchAlbums(q, limit = 15) {
         image:    bestImg(al.image, '150x150'),
       }));
     }
-  } catch {}
+  } catch (e) { Log.warn('searchAlbums failed', { q, err: e?.message }); }
   return [];
 }
 
@@ -167,7 +180,7 @@ export async function searchArtists(q, limit = 10) {
     if (data.status === 'SUCCESS' && results?.length) {
       return results.map(a => ({ id: a.id, name: decodeHtml(a.name || ''), subtitle: a.role || 'Artist', image: bestImg(a.image, '150x150') }));
     }
-  } catch {}
+  } catch (e) { Log.warn('searchArtists failed', { q, err: e?.message }); }
   return [];
 }
 
@@ -179,7 +192,7 @@ export async function searchPlaylists(q, limit = 15) {
     if (data.status === 'SUCCESS' && results?.length) {
       return results.map(pl => ({ id: pl.id, name: decodeHtml(pl.name || ''), subtitle: pl.songCount ? `${pl.songCount} songs` : (pl.language || 'Playlist'), image: bestImg(pl.image, '150x150') }));
     }
-  } catch {}
+  } catch (e) { Log.warn('searchPlaylists failed', { q, err: e?.message }); }
   return [];
 }
 

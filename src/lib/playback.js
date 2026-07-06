@@ -14,7 +14,7 @@ import {
   repeatMode, getAudioElement
 } from './stores/playback.js';
 import { toast, npOpen } from './stores/ui.js';
-import { smartInjectAhead, smartQueueFill, intelTrackPlay, _artistKey } from './smartPlay.js';
+import { smartInjectAhead, smartQueueFill, intelTrackPlay, suppressArtist } from './smartPlay.js';
 
 // Per-session state (not stores — concurrency flags, not reactive UI)
 let _pendingNext      = false;
@@ -30,10 +30,6 @@ export function isTransitioningTrack() { return transitioningTrack; }
 let _intelNaturalEnd  = false;
 let _intelPlayStartTs = 0;
 let _sessionSkipStreak = 0;
-let _sessionSuppressed = new Set();
-const _suppressedAt   = new Map();
-let _prevFullPlayArtistKey = null;
-let _queueWritePending = false;
 
 export function createShuffledQueue() {
   const q = get(queue);
@@ -42,6 +38,22 @@ export function createShuffledQueue() {
   for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
   shuffledQueue.set([idx, ...arr]);
   shufflePos.set(0);
+}
+
+// F14: when SmartPlay injects songs mid-queue, the new queue indices are not in
+// shuffledQueue, so they were unreachable in shuffle mode. Append any queue index
+// missing from the shuffle order (shuffled) so injected songs still play.
+export function syncShuffleWithQueue() {
+  if (!get(shuffleOn)) return;
+  const sq = get(shuffledQueue);
+  if (!sq.length) return;
+  const present = new Set(sq);
+  const missing = [];
+  const qLen = get(queue).length;
+  for (let i = 0; i < qLen; i++) if (!present.has(i)) missing.push(i);
+  if (!missing.length) return;
+  for (let i = missing.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [missing[i], missing[j]] = [missing[j], missing[i]]; }
+  shuffledQueue.set([...sq, ...missing]);
 }
 
 export async function play(song, newQueue, idx) {
@@ -221,6 +233,10 @@ export function prev() {
       const sq = get(shuffledQueue);
       qIdx.set(sq[pos - 1]);
       play(get(queue)[sq[pos - 1]]);
+    } else if (audio) {
+      // F12: at the first shuffled track, Prev restarts the current song
+      // (was a silent no-op — inconsistent with the linear path below).
+      audio.currentTime = 0;
     }
     return;
   }
@@ -236,7 +252,7 @@ export function prev() {
   }
 }
 
-export function next() {
+export function next({ fromEnded = false } = {}) {
   const audio = getAudioElement();
   const song  = get(nowSong);
   if (song) {
@@ -245,12 +261,14 @@ export function next() {
     const ratio   = _intelNaturalEnd ? 1.0 : (totDur > 0 ? curTime / totDur : 0);
     const isFast  = !_intelNaturalEnd && _intelPlayStartTs > 0 && (Date.now() - _intelPlayStartTs) < 5000;
     intelTrackPlay(song, ratio, isFast);
-    if (_intelNaturalEnd || ratio >= 0.8) { _sessionSkipStreak = 0; smartInjectAhead(); }
+    if (_intelNaturalEnd || ratio >= 0.8) { _sessionSkipStreak = 0; smartInjectAhead().then(() => syncShuffleWithQueue()); }
     else if (isFast) {
       _sessionSkipStreak++;
       if (_sessionSkipStreak >= 2) {
-        const key = _artistKey(song);
-        if (key) { _sessionSuppressed.add(key); _suppressedAt.set(key, Date.now()); }
+        // F13/F22: was writing to a dead local Set — the live suppression state lives
+        // in smartPlay.js, so fast-skip artist suppression never actually fired.
+        // Call the canonical suppressArtist() so the feature works.
+        suppressArtist(song);
         _sessionSkipStreak = 0;
       }
     } else { _sessionSkipStreak = 0; }
@@ -260,8 +278,9 @@ export function next() {
   if (get(loadingUrl)) { _pendingNext = true; return; }
 
   const rm = get(repeatMode);
-  if (rm === 2) {
-    // repeat-one: restart current track
+  if (rm === 2 && fromEnded) {
+    // repeat-one: restart current track ONLY on natural end (F11).
+    // A manual Next tap must still advance to the next song — matching Spotify/Apple.
     const audioEl = getAudioElement();
     if (!audioEl) return;
     audioEl.currentTime = 0;
@@ -280,7 +299,14 @@ export function next() {
       if (rm === 1) { createShuffledQueue(); ni = get(shuffledQueue)[0]; }
       else {
         smartQueueFill().then(filled => {
-          if (!filled) {
+          if (filled) {
+            // F1: fill appended songs and set qIdx to the first — rebuild the shuffle
+            // index so the new songs are reachable, then play. Without this the queue
+            // silently dead-stops: songs sit in the queue but nothing plays.
+            createShuffledQueue();
+            const sq2 = get(shuffledQueue);
+            play(get(queue)[sq2[0]]);
+          } else {
             const audioEl = getAudioElement();
             if (audioEl && !audioEl.paused) audioEl.pause();
             playing.set(false);
@@ -300,7 +326,12 @@ export function next() {
       if (rm === 1) ni = 0;
       else {
         smartQueueFill().then(filled => {
-          if (!filled) {
+          if (filled) {
+            // F1: smartQueueFill() appended songs and set qIdx to the first new one.
+            // The previous code returned without playing, so the queue silently
+            // dead-stopped. Play the song smartQueueFill() queued up.
+            play(get(queue)[get(qIdx)]);
+          } else {
             // No more songs — stop both the store AND the audio element so
             // the button state matches what is actually playing.
             const audioEl = getAudioElement();
@@ -320,7 +351,7 @@ export function next() {
 // Called from audio 'ended' event in layout
 export function onEnded() {
   _intelNaturalEnd = true;
-  next();
+  next({ fromEnded: true });
 }
 
 export function seek(ratio) {

@@ -6,20 +6,11 @@ export function decodeHtml(s) {
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 }
 
-export function esc(s) {
-  // Strip Unicode directional override chars that could spoof titles via RTL reversal
-  return String(s)
-    .replace(/[‪-‮⁦-⁩]/g, '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
 export function fmt(sec) {
   if (!sec || isNaN(sec)) return '0:00';
   const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
 }
-
-export function artUrl(song) { return song?.image || ''; }
 
 export function bestImg(arr, size = '150x150') {
   if (!arr) return '';
@@ -45,8 +36,6 @@ export function cacheSong(s) {
   if (_songCache.size > 300) _songCache.delete(_songCache.keys().next().value);
 }
 export function cacheSongs(arr) { arr?.forEach(cacheSong); }
-export function getCachedSong(id) { return _songCache.get(id) || null; }
-export function getSongCache() { return _songCache; }
 
 // AbortSignal.timeout polyfill for iOS < 16
 if (typeof AbortSignal !== 'undefined' && !AbortSignal.timeout) {

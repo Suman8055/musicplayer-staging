@@ -57,9 +57,26 @@
             });
           });
 
-          // When the new SW takes control, reload to load fresh assets
-          navigator.serviceWorker.addEventListener('controllerchange', () =>
-            setTimeout(() => location.reload(), 400));
+          // When the new SW takes control, reload to load fresh assets.
+          // F2: never reload while audio is actively playing — a gesture-less reload
+          // stops the music and iOS won't autoplay afterwards. If a song is playing,
+          // defer the reload until it pauses/ends. With skipWaiting() removed from the
+          // SW install step, controllerchange now only fires after an explicit user
+          // "Update now", so this is a safety net rather than the primary gate.
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            function isAudioPlaying() {
+              var a = document.getElementById('audio');
+              return !!a && !a.paused && !a.ended && a.currentTime > 0;
+            }
+            function reloadWhenIdle() {
+              if (!isAudioPlaying()) { location.reload(); return; }
+              var a = document.getElementById('audio');
+              var done = function () { a && a.removeEventListener('pause', done); a && a.removeEventListener('ended', done); location.reload(); };
+              a.addEventListener('pause', done);
+              a.addEventListener('ended', done);
+            }
+            setTimeout(reloadWhenIdle, 400);
+          });
         }).catch(() => {});
       }
     </script>

@@ -1,11 +1,10 @@
 <script>
   import { isStaging } from '$lib/api.js';
-  import { envBannerH } from '$lib/stores/ui.js';
   import { onMount } from 'svelte';
 
   onMount(() => {
+    // F33: envBannerH store was write-only — the CSS var below is the real source.
     const staging = isStaging();
-    envBannerH.set(staging ? '38px' : '0px');
     document.documentElement.style.setProperty('--env-banner-h', staging ? '38px' : '0px');
   });
 </script>

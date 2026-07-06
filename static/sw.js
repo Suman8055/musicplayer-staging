@@ -8,7 +8,7 @@
 
 const BASE  = self.registration.scope.replace(/\/$/, '');
 
-const CACHE = 'mbx-sk-v5.2.62';
+const CACHE = 'mbx-sk-v5.2.63';
 
 // Shell files — updated by inject-sw-shell.js after build with current chunk hashes
 const SHELL = [
@@ -22,13 +22,17 @@ const SHELL = [
 ];
 
 self.addEventListener('install', e => {
+  // F2: DO NOT skipWaiting() here. Auto-activating a freshly-installed SW fires
+  // controllerchange → the page reloads mid-song, killing audio (and iOS won't
+  // autoplay after a gesture-less reload). Instead the SW waits until the app
+  // explicitly sends SKIP_WAITING — which the UpdateBanner only does when the
+  // user taps "Update now" and playback is not active.
   e.waitUntil(
     caches.open(CACHE)
       .then(c => c.addAll(SHELL))
-      .then(() => self.skipWaiting())
       .catch(err => {
-        console.error('[SW] Shell pre-cache failed — keeping old SW active', err);
-        throw err; // prevents skipWaiting, old SW stays in control
+        console.error('[SW] Shell pre-cache failed', err);
+        throw err;
       })
   );
 });

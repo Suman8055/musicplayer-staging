@@ -235,6 +235,15 @@ export function getAudioCtxState() {
   return _audioCtx?.state ?? null;
 }
 
+// F10: a first-class resume for the visibility/pageshow/resume recovery paths.
+// Previously the layout reached through getDebugInfo().audioCtx.resume() — using a
+// debug API as production control flow, which would break if getDebugInfo shrank.
+export async function resumeIfSuspended() {
+  if (_audioCtx?.state === 'suspended') {
+    try { await _audioCtx.resume(); } catch {}
+  }
+}
+
 // ── Playback hooks (called by audio event listeners in +layout.svelte) ────────
 export function onPlaybackStarted()  { startBgKeepAlive(); }
 export function onPlaybackPaused()   { /* keep-alive continues; stopped on user pause */ }
@@ -276,8 +285,9 @@ export function stopBgKeepAlive() {
 // ── Volume control ────────────────────────────────────────────────────────────
 export function setVolume(v) {
   if (_corsAvailable && _volumeGain) {
-    // Write to _volumeGain only — _gainNode.gain is reserved for LUFS automation
-    // and must not be overwritten by volume changes (cancels setTargetAtTime ramp).
+    // Write user volume to _volumeGain. (_gainNode is a fixed unity bridge — the LUFS
+    // automation the old comment referenced was removed; nothing writes _gainNode.gain
+    // after init, so there's no ramp to preserve here.)
     _volumeGain.gain.value = v;
   } else if (_audioEl) {
     _audioEl.volume = v;
@@ -387,7 +397,14 @@ function _buildLimiterChain(ctx) {
   _limiterWaveshaper.oversample = _ipodMode ? '2x' : '4x';
   const N = 65536;
   const curve = new Float32Array(N);
-  const CEIL = 0.794;
+  const CEIL = 0.794;   // knee threshold = −2 dBFS
+  // F15 + F16: the previous curve asymptoted to ~0.993 (−0.06 dBFS), so the claimed
+  // "−2 dBFS ceiling" was false and transients rode near full scale. It also had a
+  // slope discontinuity at the knee (1 → 2), injecting odd-harmonic grit.
+  // New soft-knee: f(a) = CEIL + KNEE·tanh((a−CEIL)/KNEE). tanh'(0)=1 makes the knee
+  // C¹-continuous (slope matches the unity region → no kink), and the curve asymptotes
+  // to CEIL+KNEE ≈ 0.844 (≈ −1.5 dBFS) — a genuine brick-wall ceiling below 0 dBFS.
+  const KNEE = 0.05;
   for (let i = 0; i < N; i++) {
     const x = (i * 2) / N - 1;
     const a = Math.abs(x);
@@ -395,7 +412,7 @@ function _buildLimiterChain(ctx) {
       curve[i] = x;
     } else {
       const sign = x < 0 ? -1 : 1;
-      curve[i] = sign * (CEIL + (1 - CEIL) * Math.tanh((a - CEIL) / (1 - CEIL) * 2));
+      curve[i] = sign * (CEIL + KNEE * Math.tanh((a - CEIL) / KNEE));
     }
   }
   _limiterWaveshaper.curve = curve;
@@ -467,15 +484,29 @@ function _teardownEqChain() {
   _eqNodes = [];
 }
 
+// F29: the air-shelf adds a fixed +1 dB at 16kHz downstream of headroom compensation,
+// so air-heavy material ran ~1 dB hotter into the limiter than the model assumed.
+// Fold that constant into the headroom target so the pre-limiter peak matches intent.
+const _FIXED_POST_EQ_BOOST_DB = 1.0; // _airShelf.gain (highshelf +1 dB)
+
+// F35: setTargetAtTime instead of direct .value writes — a fast slider drag steps
+// biquad coefficients discontinuously, producing an audible zipper/click. A 10ms
+// time constant smooths the ramp with no perceptible lag.
+function _rampGain(param, target) {
+  if (!param) return;
+  if (_audioCtx) param.setTargetAtTime(target, _audioCtx.currentTime, 0.01);
+  else param.value = target;
+}
+
 function _computeEqHeadroomGain() {
-  const maxBoostDb = _eqOn ? Math.max(0, ..._eqGains) : 0;
+  const maxBoostDb = (_eqOn ? Math.max(0, ..._eqGains) : 0) + _FIXED_POST_EQ_BOOST_DB;
   const gain = Math.pow(10, -maxBoostDb / 20); // full attenuation: prevents limiter pumping on bass presets
-  if (_eqHeadroomGain) _eqHeadroomGain.gain.value = gain;
+  if (_eqHeadroomGain) _rampGain(_eqHeadroomGain.gain, gain);
 }
 
 function _applyEqGains() {
   if (_rewiring) return;
-  _eqNodes.forEach((n, i) => { n.gain.value = _eqOn ? _eqGains[i] : 0; });
+  _eqNodes.forEach((n, i) => { _rampGain(n.gain, _eqOn ? _eqGains[i] : 0); });
   _computeEqHeadroomGain();
 }
 

@@ -1,6 +1,5 @@
 // colorEngine.js — Album art dominant color extraction
 // Extracted from index.html lines 2483–2538. Visual/CSS only — no audio.
-import { accentH, accentS, accentL } from './stores/ui.js';
 import { Log } from './logger.js';
 
 let _accentCanvas = null;
@@ -42,9 +41,8 @@ export function extractAndApplyAccent(imgUrl, songId) {
 }
 
 export function applyAccent(h, s, l) {
-  accentH.set(h);
-  accentS.set(s + '%');
-  accentL.set(l + '%');
+  // F33: the accentH/S/L stores were write-only — the CSS custom properties below
+  // are the real source of truth (consumed in app.css). Stores removed.
   document.documentElement.style.setProperty('--accent-h', h);
   document.documentElement.style.setProperty('--accent-s', s + '%');
   document.documentElement.style.setProperty('--accent-l', l + '%');
