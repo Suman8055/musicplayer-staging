@@ -60,6 +60,11 @@ function log(section, msg, ok = true) {
     log(section, `played ${(t1 - t0).toFixed(1)}s (t=${t1.toFixed(1)})`,
       t1 > 60 || (t1 - t0) > (ms / 1000) * 0.8);
   };
+  // Isolate each section — a failure logs and moves on instead of aborting the run.
+  const step = async (name, fn) => {
+    try { await fn(); }
+    catch (e) { log(name, `section error: ${String(e.message || e).split('\n')[0]}`, false); }
+  };
 
   try {
     // ── S0 Boot + gate bypass ──────────────────────────────────────────────
@@ -68,126 +73,152 @@ function log(section, msg, ok = true) {
     log('S0', 'gate bypassed, tab bar rendered');
 
     // ── S1 Discover / Browse ───────────────────────────────────────────────
-    await page.locator('[data-tab="browse"]').click();
-    await page.waitForSelector('.lang-pill', { timeout: 20_000 });
-    log('S1', `${await page.locator('.lang-pill').count()} language pills`, true);
-    if (await page.locator('.chart-row').count()) {
-      await page.locator('.chart-row').first().click();
-      await page.waitForSelector('#browse-detail.open .song-item', { timeout: 25_000 });
-      await page.locator('#browse-detail .song-item').first().click();
-    } else {
-      await page.waitForSelector('.song-item', { timeout: 20_000 });
-      await page.locator('.song-item').first().click();
-    }
-    await assertPlayedFor('S1', PLAY);
+    // Discover plays songs via .content-card / .hero-banner (not top-level .song-item).
+    await step('S1', async () => {
+      await page.locator('[data-tab="browse"]').click();
+      await page.waitForSelector('.lang-pill', { timeout: 20_000 });
+      log('S1', `${await page.locator('.lang-pill').count()} language pills`, true);
+      await page.waitForSelector('.content-card, .hero-banner, .chart-row', { timeout: 25_000 });
+      const card = page.locator('.content-card').first();
+      if (await card.count()) {
+        await card.click();
+      } else if (await page.locator('.hero-play-btn').count()) {
+        await page.locator('.hero-play-btn').first().click();
+      } else if (await page.locator('.chart-row').count()) {
+        await page.locator('.chart-row').first().click();
+        await page.waitForSelector('#browse-detail.open .song-item', { timeout: 25_000 });
+        await page.locator('#browse-detail .song-item').first().click();
+      }
+      await assertPlayedFor('S1', PLAY);
+    });
 
     // ── S2 Search ──────────────────────────────────────────────────────────
-    await page.locator('[data-tab="search"]').click();
-    await page.locator('#search-input').fill('arijit singh');
-    await page.locator('#search-input').press('Enter');
-    await page.waitForSelector('#search-results .song-item', { timeout: 20_000 });
-    await page.locator('#search-results .song-item').first().click();
-    await assertPlayedFor('S2', PLAY);
+    await step('S2', async () => {
+      await page.locator('[data-tab="search"]').click();
+      await page.locator('#search-input').fill('arijit singh');
+      await page.locator('#search-input').press('Enter');
+      await page.waitForSelector('#search-results .song-item', { timeout: 20_000 });
+      await page.locator('#search-results .song-item').first().click();
+      await assertPlayedFor('S2', PLAY);
+    });
 
     // ── S3 Now Playing transport ───────────────────────────────────────────
-    await page.locator('#mini').click();
-    await page.waitForSelector('#np.open', { timeout: 10_000 });
-    log('S3', 'Now Playing opened');
-    await page.locator('#np-seek').evaluate(el => {
-      el.value = 25;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
+    await step('S3', async () => {
+      await page.locator('#mini').click();
+      await page.waitForSelector('#np.open', { timeout: 10_000 });
+      log('S3', 'Now Playing opened');
+      await page.locator('#np-seek').evaluate(el => {
+        el.value = 25;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await assertPlayedFor('S3', PLAY);
+      await page.locator('#np-next-btn').click();
+      await page.waitForTimeout(3_000);
+      log('S3', 'Next → advanced', await isPlaying());
+      await assertPlayedFor('S3-next', PLAY);
     });
-    await assertPlayedFor('S3', PLAY);
-    await page.locator('#np-next-btn').click();
-    await page.waitForTimeout(3_000);
-    log('S3', 'Next → advanced', await isPlaying());
-    await assertPlayedFor('S3-next', PLAY);
 
     // ── S4 Shuffle + Next/Prev (F12, F14) ──────────────────────────────────
-    await page.locator('#np-shuffle-btn').click();
-    await page.waitForTimeout(1_000);
-    await page.locator('#np-next-btn').click();
-    await page.waitForTimeout(2_500);
-    await page.locator('#np-next-btn').click();
-    await page.waitForTimeout(2_500);
-    log('S4', 'shuffle Next×2 reachable & playing (F14)', await isPlaying());
-    await page.locator('#np-prev-btn').click();
-    await page.waitForTimeout(2_000);
-    const tAfterPrev = await currentTime();
-    log('S4', `Prev → t=${tAfterPrev.toFixed(1)} (restart/move) (F12)`, tAfterPrev < 10);
-    await assertPlayedFor('S4', PLAY_SHORT);
+    await step('S4', async () => {
+      await page.locator('#np-shuffle-btn').click();
+      await page.waitForTimeout(1_000);
+      await page.locator('#np-next-btn').click();
+      await page.waitForTimeout(2_500);
+      await page.locator('#np-next-btn').click();
+      await page.waitForTimeout(2_500);
+      log('S4', 'shuffle Next×2 reachable & playing (F14)', await isPlaying());
+      await page.locator('#np-prev-btn').click();
+      await page.waitForTimeout(2_000);
+      const tAfterPrev = await currentTime();
+      log('S4', `Prev → t=${tAfterPrev.toFixed(1)} (restart/move) (F12)`, tAfterPrev < 10);
+      await assertPlayedFor('S4', PLAY_SHORT);
+    });
 
     // ── S5 Repeat modes (F11) ──────────────────────────────────────────────
-    await page.locator('#np-repeat-btn').click(); // repeat-all
-    await page.locator('#np-repeat-btn').click(); // repeat-one
-    const beforeName = (await page.locator('#np-song').textContent())?.trim();
-    await page.locator('#np-next-btn').click();
-    await page.waitForTimeout(3_000);
-    const afterName = (await page.locator('#np-song').textContent())?.trim();
-    log('S5', `repeat-one Next: "${beforeName}" → "${afterName}" (F11 should advance)`,
-      beforeName !== afterName);
-    await page.locator('#np-repeat-btn').click(); // off
-    await assertPlayedFor('S5', PLAY);
+    await step('S5', async () => {
+      await page.locator('#np-repeat-btn').click(); // repeat-all
+      await page.locator('#np-repeat-btn').click(); // repeat-one
+      const beforeName = (await page.locator('#np-song').textContent())?.trim();
+      await page.locator('#np-next-btn').click();
+      await page.waitForTimeout(3_000);
+      const afterName = (await page.locator('#np-song').textContent())?.trim();
+      log('S5', `repeat-one Next: "${beforeName}" → "${afterName}" (F11 should advance)`,
+        beforeName !== afterName);
+      await page.locator('#np-repeat-btn').click(); // off
+      await assertPlayedFor('S5', PLAY);
+    });
 
     // ── S6 Queue panel ─────────────────────────────────────────────────────
-    await page.locator('#np-queue-btn').click();
-    await page.waitForSelector('#queue-panel.open', { timeout: 10_000 });
-    const qn = await page.locator('#queue-panel .song-item').count();
-    log('S6', `${qn} songs in queue`, qn > 0);
-    if (qn > 1) {
-      await page.locator('#queue-panel .song-item').nth(1).click();
-      await page.waitForTimeout(3_000);
-      log('S6', 'jumped to queue item', await isPlaying());
-      await assertPlayedFor('S6', PLAY_SHORT);
-    }
-    await page.keyboard.press('Escape').catch(() => {});
+    await step('S6', async () => {
+      await page.locator('#np-queue-btn').click();
+      await page.waitForSelector('#queue-panel.open', { timeout: 10_000 });
+      const qn = await page.locator('#queue-panel .song-item').count();
+      log('S6', `${qn} songs in queue`, qn > 0);
+      if (qn > 1) {
+        await page.locator('#queue-panel .song-item').nth(1).click();
+        await page.waitForTimeout(3_000);
+        log('S6', 'jumped to queue item', await isPlaying());
+        await assertPlayedFor('S6', PLAY_SHORT);
+      }
+      await page.keyboard.press('Escape').catch(() => {});
+    });
 
     // ── S7 EQ sheet ────────────────────────────────────────────────────────
-    await page.locator('#np-eq-btn').click();
-    await page.waitForTimeout(1_500);
-    const sliders = await page.locator('input[type="range"]').count();
-    log('S7', `EQ sheet, ${sliders} range inputs`, sliders > 0);
-    const band = page.locator('input[type="range"]').nth(2);
-    if (await band.count()) {
-      await band.evaluate(el => { el.value = 6; el.dispatchEvent(new Event('input', { bubbles: true })); });
-    }
-    await assertPlayedFor('S7', PLAY_SHORT);
-    await page.keyboard.press('Escape').catch(() => {});
+    await step('S7', async () => {
+      await page.locator('#np-eq-btn').click();
+      await page.waitForTimeout(1_500);
+      const sliders = await page.locator('input[type="range"]').count();
+      log('S7', `EQ sheet, ${sliders} range inputs`, sliders > 0);
+      const band = page.locator('input[type="range"]').nth(2);
+      if (await band.count()) {
+        await band.evaluate(el => { el.value = 6; el.dispatchEvent(new Event('input', { bubbles: true })); });
+      }
+      await assertPlayedFor('S7', PLAY_SHORT);
+      await page.keyboard.press('Escape').catch(() => {});
+    });
 
     // ── S8 Lyrics ──────────────────────────────────────────────────────────
-    await page.locator('#np-lyrics-btn').click().catch(() => {});
-    await page.waitForTimeout(2_000);
-    log('S8', 'lyrics toggled (render or graceful fallback)');
-    await page.keyboard.press('Escape').catch(() => {});
+    await step('S8', async () => {
+      await page.locator('#np-lyrics-btn').click().catch(() => {});
+      await page.waitForTimeout(2_000);
+      log('S8', 'lyrics toggled (render or graceful fallback)');
+      await page.keyboard.press('Escape').catch(() => {});
+    });
 
     // ── S9 Library ─────────────────────────────────────────────────────────
-    await page.locator('#np-like').click().catch(() => {});
-    await page.locator('#np-close-btn').click({ force: true }).catch(() => {});
-    await page.locator('[data-tab="library"]').click();
-    await page.waitForTimeout(2_000);
-    const libSongs = await page.locator('.song-item').count();
-    log('S9', `Library shows ${libSongs} items`, libSongs >= 0);
-    if (libSongs > 0) {
-      await page.locator('.song-item').first().click();
-      await assertPlayedFor('S9', PLAY);
-    }
+    await step('S9', async () => {
+      await page.locator('#np-like').click().catch(() => {});
+      await page.locator('#np-close-btn').click({ force: true }).catch(() => {});
+      await page.locator('[data-tab="library"]').click();
+      await page.waitForTimeout(2_000);
+      const libSongs = await page.locator('.song-item').count();
+      log('S9', `Library shows ${libSongs} items`, libSongs >= 0);
+      if (libSongs > 0) {
+        await page.locator('.song-item').first().click();
+        await assertPlayedFor('S9', PLAY);
+      }
+    });
 
     // ── S10 Settings ───────────────────────────────────────────────────────
-    await page.locator('[data-tab="settings"]').click();
-    await page.waitForTimeout(1_500);
-    const bodyText = await page.locator('body').textContent();
-    log('S10', 'Settings shows version 5.2.62', /5\.2\.62/.test(bodyText || ''));
-    const elder = page.getByText(/Elder View/i);
-    if (await elder.count()) { await elder.first().click().catch(() => {}); log('S10', 'Elder View toggled'); }
+    await step('S10', async () => {
+      await page.locator('[data-tab="settings"]').click();
+      await page.waitForTimeout(1_500);
+      const bodyText = await page.locator('body').textContent();
+      log('S10', 'Settings shows a 5.2.x version', /5\.2\.\d+/.test(bodyText || ''));
+      const elder = page.getByText(/Elder View/i);
+      if (await elder.count()) { await elder.first().click().catch(() => {}); log('S10', 'Elder View toggled'); }
+    });
 
     // ── S11 Long-play soak ─────────────────────────────────────────────────
-    await page.locator('#mini').click().catch(() => {});
-    const soakStart = await currentTime();
-    await page.waitForTimeout(SOAK);
-    const soakEnd = await currentTime();
-    log('S11', `soak ${soakStart.toFixed(1)} → ${soakEnd.toFixed(1)} (no stall)`,
-      soakEnd > soakStart + 60 || soakEnd < soakStart);
+    await step('S11', async () => {
+      await page.locator('#mini').click().catch(() => {});
+      const soakStart = await currentTime();
+      await page.waitForTimeout(SOAK);
+      const soakEnd = await currentTime();
+      log('S11', `soak ${soakStart.toFixed(1)} → ${soakEnd.toFixed(1)} (no stall)`,
+        soakEnd > soakStart + 60 || soakEnd < soakStart);
+    });
   } catch (err) {
     log('FATAL', String(err && err.message || err), false);
   } finally {
