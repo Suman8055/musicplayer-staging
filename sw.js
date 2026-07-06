@@ -7,7 +7,8 @@
 //   4. skipWaiting only after shell cache succeeds — prevents blank screen on partial cache
 
 const BASE  = self.registration.scope.replace(/\/$/, '');
-const CACHE = 'mbx-sk-v5.2.46-939a5a6';
+
+const CACHE = 'mbx-sk-v5.2.65-fb49c6b';
 
 // Shell files — updated by inject-sw-shell.js after build with current chunk hashes
 const SHELL = [
@@ -18,26 +19,31 @@ const SHELL = [
   BASE + '/icon-192.png',
   BASE + '/icon-512.png',
   BASE + '/apple-touch-icon.png',
-  BASE + '/_app/immutable/entry/start.Bck-aLIl.js',
-  BASE + '/_app/immutable/chunks/BVqpXgNy.js',
-  BASE + '/_app/immutable/chunks/BSw_KR7x.js',
-  BASE + '/_app/immutable/chunks/C6MFgNCR.js',
-  BASE + '/_app/immutable/entry/app.C5HPcHoY.js',
+  BASE + '/_app/immutable/entry/start.CmacWdDk.js',
+  BASE + '/_app/immutable/chunks/CYo5N9jf.js',
+  BASE + '/_app/immutable/chunks/kXES1-6-.js',
+  BASE + '/_app/immutable/chunks/BtqWobR3.js',
+  BASE + '/_app/immutable/entry/app.WMkGyha3.js',
   BASE + '/_app/immutable/chunks/CmsKOCeN.js',
-  BASE + '/_app/immutable/chunks/-In5gsl0.js',
-  BASE + '/_app/immutable/nodes/0.DEIlRMl_.js',
-  BASE + '/_app/immutable/chunks/B4iWx8kV.js',
-  BASE + '/_app/immutable/assets/0.C_u_Kvl2.css',
+  BASE + '/_app/immutable/chunks/DCytfWcn.js',
+  BASE + '/_app/immutable/nodes/0.Bhzw860V.js',
+  BASE + '/_app/immutable/chunks/i-eEN780.js',
+  BASE + '/_app/immutable/assets/BackButton.CxH5YLWp.css',
+  BASE + '/_app/immutable/assets/0.DYTWfGDJ.css',
 ];
 
 self.addEventListener('install', e => {
+  // F2: DO NOT skipWaiting() here. Auto-activating a freshly-installed SW fires
+  // controllerchange → the page reloads mid-song, killing audio (and iOS won't
+  // autoplay after a gesture-less reload). Instead the SW waits until the app
+  // explicitly sends SKIP_WAITING — which the UpdateBanner only does when the
+  // user taps "Update now" and playback is not active.
   e.waitUntil(
     caches.open(CACHE)
       .then(c => c.addAll(SHELL))
-      .then(() => self.skipWaiting())
       .catch(err => {
-        console.error('[SW] Shell pre-cache failed — keeping old SW active', err);
-        throw err; // prevents skipWaiting, old SW stays in control
+        console.error('[SW] Shell pre-cache failed', err);
+        throw err;
       })
   );
 });
