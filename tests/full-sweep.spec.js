@@ -43,7 +43,9 @@ function log(section, msg, ok = true) {
     userAgent:
       'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
   });
-  await context.addInitScript(h => localStorage.setItem('mbx_gate', h), GATE_HASH);
+  // The gate token is a `persisted` store → JSON.stringify'd in localStorage.
+  // It must be the quoted JSON string, not the raw hash, or the gate stays locked.
+  await context.addInitScript(h => localStorage.setItem('mbx_gate', JSON.stringify(h)), GATE_HASH);
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
 
