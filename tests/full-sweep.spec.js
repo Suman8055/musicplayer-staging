@@ -80,9 +80,23 @@ function log(section, msg, ok = true) {
   // which covers the tab bar and intercepts clicks. Close it before navigating tabs.
   const closeNP = async () => {
     const open = await page.locator('#np.open').count();
-    if (open) { await page.locator('#np-close-btn').click({ force: true }).catch(() => {}); await page.waitForTimeout(500); }
+    if (open) { await page.locator('#np-close-btn').click({ force: true }).catch(() => {}); await page.waitForTimeout(800); }
   };
-  const goTab = async (tab) => { await closeNP(); await page.locator(`[data-tab="${tab}"]`).click(); };
+  const goTab = async (tab) => {
+    await closeNP();
+    // Retry the tab click in case the panel is still transitioning or the tab bar isn't interactive yet.
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        await page.locator(`[data-tab="${tab}"]`).click({ timeout: 5_000 });
+        break;
+      } catch (e) {
+        attempts++;
+        if (attempts < 3) await page.waitForTimeout(1_000);
+        else throw e;
+      }
+    }
+  };
 
   try {
     // ── S0 Boot + gate bypass ──────────────────────────────────────────────
@@ -96,7 +110,8 @@ function log(section, msg, ok = true) {
       await page.locator('[data-tab="browse"]').click();
       await page.waitForSelector('.lang-pill', { timeout: 20_000 });
       log('S1', `${await page.locator('.lang-pill').count()} language pills`, true);
-      await page.waitForSelector('.content-card, .hero-banner, .chart-row', { timeout: 25_000 });
+      // Discover content can take up to 30s+ to load on staging (network + API).
+      await page.waitForSelector('.content-card, .hero-banner, .chart-row', { timeout: 40_000 });
       const card = page.locator('.content-card').first();
       if (await card.count()) {
         await card.click();
