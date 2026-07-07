@@ -4,7 +4,7 @@ import { decodeHtml, bestImg } from './utils.js';
 import { Log } from './logger.js';
 
 
-export const APP_VERSION = '5.2.73';
+export const APP_VERSION = '5.2.74';
 export const STORE_KEY   = 'mbx_v2';
 export const ENV_KEY     = 'mbx_env';
 // DES-ECB key removed — was dead code from the old SAAVN stream URL decryption path.
@@ -141,6 +141,8 @@ function normSigmaSong(s) {
       views:  parseInt(s.viewCount, 10) || 0,
     },
     available: s.hasAvailableUrl !== false,  // Default true if field not present
+    // S4.2: Availability & geo — region lock detection
+    availableCountries: s.availableCountries || s.availableTerritories || null,
   };
   song._lang = classifyLanguage(song);
   return song;
@@ -170,6 +172,7 @@ async function _searchFallback(q, limit = 20) {
       views:  0,
     },
     available: true,  // Assume available in fallback
+    availableCountries: s.more_info?.availableCountries || null,
     _lang:    null,
   }));
 }
