@@ -1,6 +1,6 @@
 {
   "name": "musicplayer-svelte",
-  "version": "5.2.70",
+  "version": "5.2.71",
   "private": true,
   "type": "module",
   "scripts": {

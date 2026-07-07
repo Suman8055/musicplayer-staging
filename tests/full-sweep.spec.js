@@ -228,7 +228,11 @@ function log(section, msg, ok = true) {
     });
 
     // ── S9 Library ─────────────────────────────────────────────────────────
+    // After S7/S8 EQ/Lyrics interactions, NP state may be odd. Force-close NP first.
     await step('S9', async () => {
+      await page.keyboard.press('Escape').catch(() => {}); // close any open sheets
+      await page.waitForTimeout(500);
+      await closeNP(); // aggressive NP close
       await page.locator('#np-like').click().catch(() => {});
       await goTab('library');
       await page.waitForTimeout(2_000);
@@ -241,7 +245,11 @@ function log(section, msg, ok = true) {
     });
 
     // ── S10 Settings ───────────────────────────────────────────────────────
+    // Similar aggressive close as S9 to ensure clean state.
     await step('S10', async () => {
+      await page.keyboard.press('Escape').catch(() => {});
+      await page.waitForTimeout(500);
+      await closeNP();
       await goTab('settings');
       await page.waitForTimeout(1_500);
       const bodyText = await page.locator('body').textContent();
