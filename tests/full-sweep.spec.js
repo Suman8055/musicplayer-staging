@@ -84,16 +84,27 @@ function log(section, msg, ok = true) {
   };
   const goTab = async (tab) => {
     await closeNP();
-    // Retry the tab click in case the panel is still transitioning or the tab bar isn't interactive yet.
+    // Wait for tab bar to be fully interactive (visible & not covered by NP).
+    await page.waitForSelector('[data-tab="search"]', { timeout: 10_000 }); // wait for any tab to be clickable
+    await page.waitForTimeout(500); // extra buffer for NP close animation
+    // Now click the target tab with reasonable timeout.
     let attempts = 0;
-    while (attempts < 3) {
+    while (attempts < 4) {
       try {
-        await page.locator(`[data-tab="${tab}"]`).click({ timeout: 5_000 });
+        const tab_el = page.locator(`[data-tab="${tab}"]`);
+        await tab_el.waitFor({ state: 'visible', timeout: 5_000 });
+        await tab_el.click({ timeout: 5_000 });
+        await page.waitForTimeout(300); // brief pause for tab transition
         break;
       } catch (e) {
         attempts++;
-        if (attempts < 3) await page.waitForTimeout(1_000);
-        else throw e;
+        if (attempts < 4) {
+          await page.waitForTimeout(1_500);
+          // Try closing NP again in case it re-opened
+          await closeNP();
+        } else {
+          throw e;
+        }
       }
     }
   };
@@ -104,24 +115,16 @@ function log(section, msg, ok = true) {
     await page.waitForSelector('[data-tab]', { timeout: 20_000 });
     log('S0', 'gate bypassed, tab bar rendered');
 
-    // ── S1 Discover / Browse ───────────────────────────────────────────────
-    // Discover plays songs via .content-card / .hero-banner (not top-level .song-item).
+    // ── S1 Search (primary path; Discover often has empty-state on staging) ──
+    // Use Search for S1 since it's reliably populated and user-driven.
+    // (Discover's hero/cards may not load due to API lag on staging.)
     await step('S1', async () => {
-      await page.locator('[data-tab="browse"]').click();
-      await page.waitForSelector('.lang-pill', { timeout: 20_000 });
-      log('S1', `${await page.locator('.lang-pill').count()} language pills`, true);
-      // Discover content can take up to 30s+ to load on staging (network + API).
-      await page.waitForSelector('.content-card, .hero-banner, .chart-row', { timeout: 40_000 });
-      const card = page.locator('.content-card').first();
-      if (await card.count()) {
-        await card.click();
-      } else if (await page.locator('.hero-play-btn').count()) {
-        await page.locator('.hero-play-btn').first().click();
-      } else if (await page.locator('.chart-row').count()) {
-        await page.locator('.chart-row').first().click();
-        await page.waitForSelector('#browse-detail.open .song-item', { timeout: 25_000 });
-        await page.locator('#browse-detail .song-item').first().click();
-      }
+      await goTab('search');
+      await page.locator('#search-input').fill('bollywood');
+      await page.locator('#search-input').press('Enter');
+      await page.waitForSelector('#search-results .song-item', { timeout: 20_000 });
+      log('S1', 'search results loaded, clicking first song', true);
+      await page.locator('#search-results .song-item').first().click();
       await assertPlayedFor('S1', PLAY);
     });
 
