@@ -4,7 +4,7 @@ import { decodeHtml, bestImg } from './utils.js';
 import { Log } from './logger.js';
 
 
-export const APP_VERSION = '5.2.72';
+export const APP_VERSION = '5.2.73';
 export const STORE_KEY   = 'mbx_v2';
 export const ENV_KEY     = 'mbx_env';
 // DES-ECB key removed — was dead code from the old SAAVN stream URL decryption path.
@@ -114,6 +114,15 @@ function normSigmaSong(s) {
     ? pa.map(a => a.name || '').filter(Boolean).join(', ')
     : decodeHtml(pa || '');
   if (!artist) artist = decodeHtml(s.artistMap?.primary?.[0]?.name || '');
+
+  // Extract featured artists if present (can be string or array)
+  let featured = '';
+  if (s.featuredArtists) {
+    featured = Array.isArray(s.featuredArtists)
+      ? s.featuredArtists.map(a => a.name || '').filter(Boolean).join(', ')
+      : decodeHtml(s.featuredArtists || '');
+  }
+
   const song = {
     id:       s.id,
     name:     decodeHtml(s.name || s.title || ''),
@@ -122,6 +131,16 @@ function normSigmaSong(s) {
     language: s.language || '',
     image:    bestImg(s.image, '150x150'),
     duration: safeDuration(s.duration),
+    // S4.1 Quick Wins: Untapped metadata
+    year:     s.year ? parseInt(s.year, 10) : null,
+    explicit: s.explicitContent === 1 || s.explicitContent === '1',
+    featured: featured || null,
+    url:      s.url || null,
+    popularity: {
+      plays:  parseInt(s.playCount, 10) || 0,
+      views:  parseInt(s.viewCount, 10) || 0,
+    },
+    available: s.hasAvailableUrl !== false,  // Default true if field not present
   };
   song._lang = classifyLanguage(song);
   return song;
@@ -141,6 +160,16 @@ async function _searchFallback(q, limit = 20) {
     album:    decodeHtml(s.album || ''),
     image:    (s.image || '').replace('50x50', '150x150'),
     duration: safeDuration(s.more_info?.duration),
+    // S4.1: Fallback search also includes metadata when available
+    year:     s.more_info?.year ? parseInt(s.more_info.year, 10) : null,
+    explicit: s.more_info?.explicit_content === '1' || s.more_info?.explicit_content === 1,
+    featured: decodeHtml(s.more_info?.featured_artists || '') || null,
+    url:      s.more_info?.song_link || s.url || null,
+    popularity: {
+      plays:  0,  // Fallback doesn't have play counts
+      views:  0,
+    },
+    available: true,  // Assume available in fallback
     _lang:    null,
   }));
 }
@@ -166,6 +195,11 @@ export async function searchAlbums(q, limit = 15) {
         name:     decodeHtml(al.name || ''),
         subtitle: Array.isArray(al.primaryArtists) ? al.primaryArtists.map(a => a.name).join(', ') : decodeHtml(al.primaryArtists || al.language || 'Album'),
         image:    bestImg(al.image, '150x150'),
+        // S4.1: Album metadata
+        year:     al.year ? parseInt(al.year, 10) : null,
+        songCount: al.songCount ? parseInt(al.songCount, 10) : 0,
+        language: al.language || '',
+        url:      al.url || null,
       }));
     }
   } catch (e) { Log.warn('searchAlbums failed', { q, err: e?.message }); }
@@ -178,7 +212,16 @@ export async function searchArtists(q, limit = 10) {
     const data = await r.json();
     const results = data.data?.results;
     if (data.status === 'SUCCESS' && results?.length) {
-      return results.map(a => ({ id: a.id, name: decodeHtml(a.name || ''), subtitle: a.role || 'Artist', image: bestImg(a.image, '150x150') }));
+      return results.map(a => ({
+        id: a.id,
+        name: decodeHtml(a.name || ''),
+        subtitle: a.role || 'Artist',
+        image: bestImg(a.image, '150x150'),
+        // S4.3: Artist metadata
+        followers: a.followerCount ? parseInt(a.followerCount, 10) : 0,
+        hasRadio: a.isRadioPresent === true,
+        dominantLanguage: a.dominantLanguage || '',
+      }));
     }
   } catch (e) { Log.warn('searchArtists failed', { q, err: e?.message }); }
   return [];
@@ -429,3 +472,63 @@ export async function fetchFeaturedPlaylists(language = 'hindi') {
 
 // DES-ECB decrypt removed — no longer used for active stream URLs.
 // SIGMA API returns plain HTTPS URLs directly. DES-ECB was a legacy Saavn v2 format.
+
+// ── S4.1 Metadata Utilities ────────────────────────────────────────────────────
+// Helper functions to use extracted untapped metadata
+
+export function formatSongDisplay(song) {
+  // Format song name with featured artists and explicit badge
+  let display = song.name || '';
+  if (song.featured) display += ` (feat. ${song.featured})`;
+  if (song.explicit) display += ' 🔞';
+  return display;
+}
+
+export function isSongAvailable(song) {
+  // Check if song is available (not region-locked, etc.)
+  return song.available !== false;
+}
+
+export function getSongPopularity(song) {
+  // Get popularity score for smart queue ranking (0-100)
+  const plays = song.popularity?.plays || 0;
+  const views = song.popularity?.views || 0;
+  // Simple scoring: normalize plays + views to 0-100 scale
+  // High popularity = better ranking in SmartPlay
+  const score = Math.min(100, (plays + views) / 100000);
+  return Math.round(score);
+}
+
+export function filterByExplicit(songs, allowExplicit = true) {
+  // Filter songs by explicit content setting
+  if (allowExplicit) return songs;
+  return songs.filter(s => !s.explicit);
+}
+
+export function filterByYear(songs, minYear = null, maxYear = null) {
+  // Filter songs by release year
+  return songs.filter(s => {
+    if (!s.year) return true; // Keep songs without year info
+    if (minYear && s.year < minYear) return false;
+    if (maxYear && s.year > maxYear) return false;
+    return true;
+  });
+}
+
+export function sortByPopularity(songs) {
+  // Sort songs by popularity (plays + views)
+  return songs.slice().sort((a, b) => {
+    const scoreA = getSongPopularity(a);
+    const scoreB = getSongPopularity(b);
+    return scoreB - scoreA;
+  });
+}
+
+export function sortByYear(songs, descending = true) {
+  // Sort songs by release year
+  return songs.slice().sort((a, b) => {
+    const yearA = a.year || 0;
+    const yearB = b.year || 0;
+    return descending ? yearB - yearA : yearA - yearB;
+  });
+}
